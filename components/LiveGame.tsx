@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Game, Team, QuestionResult, CategoryType, GameFeedback } from '../types';
+import { Game, Team, QuestionResult, CategoryType, GameFeedback, Host } from '../types';
 import { SETS_PER_GAME, CATEGORIES_PER_SET, QUESTIONS_PER_CATEGORY, saveData, calculateGameScores } from '../services/gameLogic';
 import { Button, Card, Badge, Input, Select } from './UI';
 import { Check, X, Users, RotateCcw, Save, Play, Plus, ChevronRight, Trophy, AlertTriangle, Pause, Settings, UserPlus, ClipboardList, Type, Image, Music, Box, Star, MessageSquare, RefreshCw, Download, Grid } from 'lucide-react';
@@ -8,11 +8,12 @@ import html2canvas from 'html2canvas';
 interface LiveGameProps {
   game: Game;
   teams: Team[];
+  hosts: Host[];
   onUpdateGame: (game: Game) => void;
   onExit: () => void;
 }
 
-export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, onUpdateGame, onExit }) => {
+export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdateGame, onExit }) => {
   const [currentSelection, setCurrentSelection] = useState<Set<string>>(new Set());
   const [showConfirm, setShowConfirm] = useState(false);
   const [viewMode, setViewMode] = useState<'scorer' | 'scoreboard' | 'report' | 'feedback' | 'summary'>('scorer');
@@ -40,6 +41,10 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, onUpdateGame, o
   // Helper to get current stage info
   const { set, category, question } = game.currentStage;
   const isBonusRound = set === SETS_PER_GAME; 
+  
+  // Display Helpers
+  const displayDate = new Date(game.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const displayTitle = game.type === 'Regular' ? `${displayDate} Regular Game` : game.title;
   
   // Config Keys
   const configKey = `${set}-${category}`;
@@ -262,6 +267,11 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, onUpdateGame, o
          return { team, setScores, total };
      });
 
+     // Resolve Host Names
+     const hostNames = game.hostIds && game.hostIds.length > 0 
+                ? game.hostIds.map(hid => hosts.find(h => h.id === hid)?.name || 'Unknown').join(', ')
+                : 'TNP Kabacan Team';
+     
      return (
         <div className="h-full flex flex-col p-4 md:p-6 max-w-7xl mx-auto w-full pb-24">
              <div className="flex justify-between items-center mb-6">
@@ -279,8 +289,16 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, onUpdateGame, o
                 {/* Printable Area */}
                 <div ref={summaryRef} className="bg-white p-8 rounded-xl shadow-sm min-w-[800px] text-gray-900">
                     <div className="text-center mb-8 border-b-2 border-red-600 pb-4">
-                        <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tight mb-2">{game.title}</h1>
-                        <p className="text-gray-500 font-medium">Official Score Summary • {new Date(game.date).toLocaleDateString()}</p>
+                        {/* Logo Area */}
+                        <div className="flex justify-center items-center gap-2 mb-4">
+                           <div className="text-3xl font-black text-gray-900 tracking-tight">
+                              Trivia Nights <span className="text-red-600">Pinas</span>
+                           </div>
+                        </div>
+                        
+                        <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tight mb-2">{displayTitle}</h1>
+                        <p className="text-gray-500 font-medium mb-1">{displayDate}</p>
+                        <p className="text-gray-700 font-bold text-lg">Hosted by {hostNames}</p>
                     </div>
 
                     <table className="w-full text-left mb-8">
@@ -564,7 +582,7 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, onUpdateGame, o
       <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 md:gap-6">
          <div className="flex-1 w-full">
             <div className="flex items-center justify-between md:justify-start gap-2 mb-2">
-               <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">{game.title}</span>
+               <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">{displayTitle}</span>
                {game.stickyPoints && <span className="text-xs text-gray-400">Pts: {game.stickyPoints}</span>}
             </div>
             <div className="flex items-baseline justify-between md:justify-start gap-1 md:gap-4 text-gray-900 flex-wrap">

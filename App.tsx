@@ -370,7 +370,11 @@ function App() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingGameId, setEditingGameId] = useState<string | null>(null);
     const [modalHostIds, setModalHostIds] = useState<string[]>([]); // New state for multiple hosts
-    const sortedGames = [...games].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const [showArchivedGames, setShowArchivedGames] = useState(false);
+
+    // Filter games based on archive status
+    const filteredGames = games.filter(g => showArchivedGames ? g.status === 'Archived' : g.status !== 'Archived');
+    const sortedGames = [...filteredGames].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     const openCreate = () => {
         setEditingGameId(null);
@@ -461,7 +465,11 @@ function App() {
       <div className="space-y-6 pb-20 md:pb-0">
         <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold text-gray-800">Games</h2>
-          <Button onClick={openCreate} icon={Plus}>Create Game</Button>
+          <div className="flex gap-2">
+            <button onClick={() => setShowArchivedGames(false)} className={`text-sm px-3 py-1 rounded-full ${!showArchivedGames ? 'bg-red-100 text-red-700 font-bold' : 'text-gray-500'}`}>Active</button>
+            <button onClick={() => setShowArchivedGames(true)} className={`text-sm px-3 py-1 rounded-full ${showArchivedGames ? 'bg-red-100 text-red-700 font-bold' : 'text-gray-500'}`}>Archived</button>
+            <Button onClick={openCreate} icon={Plus} className="ml-2">Create Game</Button>
+          </div>
         </div>
 
         {isModalOpen && (
@@ -530,6 +538,11 @@ function App() {
                 ? game.hostIds.map(hid => hosts.find(h => h.id === hid)?.name || 'Unknown').join(', ')
                 : 'No Host';
 
+             const displayDate = new Date(game.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+             const displayTitle = game.type === 'Regular' 
+                ? `${displayDate} Regular Game`
+                : game.title;
+
              return (
              <div key={game.id} className="bg-white border border-gray-200 hover:border-red-200 transition shadow-sm rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 group">
                 <div>
@@ -537,9 +550,9 @@ function App() {
                       {game.status === 'Live' && <Badge color="green">LIVE NOW</Badge>}
                       {game.status === 'Upcoming' && <Badge color="blue">UPCOMING</Badge>}
                       {game.status === 'Archived' && <Badge color="gray">ARCHIVED</Badge>}
-                      <span className="text-gray-400 text-xs font-bold uppercase tracking-wide">{new Date(game.date).toLocaleDateString()}</span>
+                      {game.status !== 'Upcoming' && <span className="text-gray-400 text-xs font-bold uppercase tracking-wide">{displayDate}</span>}
                    </div>
-                   <h3 className="text-xl font-bold text-gray-900 group-hover:text-red-600 transition-colors">{game.title}</h3>
+                   <h3 className="text-xl font-bold text-gray-900 group-hover:text-red-600 transition-colors">{displayTitle}</h3>
                    <div className="text-sm text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
                        <span>Host(s): <span className="font-semibold text-gray-700">{hostNames}</span></span>
                        {game.hasBonusRound && <Badge color="yellow">Bonus Round</Badge>}
@@ -554,16 +567,18 @@ function App() {
                       <Button onClick={() => handleStartGame(game.id)} variant="primary" icon={PlayCircle}>Start</Button>
                    )}
                    <Button variant="secondary" className="px-3" onClick={() => openEdit(game.id)} title="Edit Game"><Edit2 className="w-4 h-4" /></Button>
-                   {game.status !== 'Archived' && (
-                     <Button variant="danger" className="px-3" onClick={() => {
-                        if(confirm("Delete game?")) setGames(games.filter(g => g.id !== game.id));
-                     }}><Trash2 className="w-4 h-4" /></Button>
-                   )}
+                   
+                   <Button variant="danger" className="px-3" onClick={() => {
+                        if(confirm("Are you sure you want to PERMANENTLY delete this game? This cannot be undone.")) {
+                            setGames(games.filter(g => g.id !== game.id));
+                        }
+                   }} title="Delete Game"><Trash2 className="w-4 h-4" /></Button>
+                   
                 </div>
              </div>
              )
           })}
-          {sortedGames.length === 0 && <div className="text-center text-gray-400 py-12 border-2 border-dashed border-gray-200 rounded-xl">No games found. Schedule one!</div>}
+          {sortedGames.length === 0 && <div className="text-center text-gray-400 py-12 border-2 border-dashed border-gray-200 rounded-xl">No games found in this view.</div>}
         </div>
       </div>
     );
@@ -899,6 +914,7 @@ function App() {
          <LiveGame 
             game={game} 
             teams={teams} 
+            hosts={hosts} 
             onUpdateGame={updateActiveGame} 
             onExit={() => setActiveGameId(null)} 
          />
