@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Game, Team, QuestionResult, CategoryType, GameFeedback, Host } from '../types';
 import { SETS_PER_GAME, CATEGORIES_PER_SET, QUESTIONS_PER_CATEGORY, saveData, calculateGameScores } from '../services/gameLogic';
 import { Button, Card, Badge, Input, Select } from './UI';
-import { Check, X, Users, RotateCcw, Save, Play, Plus, ChevronRight, Trophy, AlertTriangle, Pause, Settings, UserPlus, ClipboardList, Type, Image, Music, Box, Star, MessageSquare, RefreshCw, Download, Grid } from 'lucide-react';
+import { Check, X, Users, RotateCcw, Save, Play, Plus, ChevronRight, Trophy, AlertTriangle, Pause, Settings, UserPlus, ClipboardList, Type, Image, Music, Box, Star, MessageSquare, RefreshCw, Download, Grid, ChevronLeft, Minus, ArrowRight } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 interface LiveGameProps {
@@ -16,7 +16,7 @@ interface LiveGameProps {
 export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdateGame, onExit }) => {
   const [currentSelection, setCurrentSelection] = useState<Set<string>>(new Set());
   const [showConfirm, setShowConfirm] = useState(false);
-  const [viewMode, setViewMode] = useState<'scorer' | 'scoreboard' | 'report' | 'feedback' | 'summary'>('scorer');
+  const [viewMode, setViewMode] = useState<'scorer' | 'scoreboard' | 'report' | 'feedback' | 'summary' | 'setSummary'>('scorer');
   const [isExiting, setIsExiting] = useState(false);
   
   // Feedback State
@@ -31,6 +31,7 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
 
   // Export State
   const summaryRef = useRef<HTMLDivElement>(null);
+  const setSummaryRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
 
   // Sync rosterIds if game prop changes externally
@@ -38,11 +39,32 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
     setRosterIds(new Set(game.participatingTeamIds));
   }, [game.participatingTeamIds]);
 
-  // Helper to get current stage info
+  // Initial State Load for Archived Games
+  useEffect(() => {
+    if (game.status === 'Archived') {
+        setViewMode('summary');
+    }
+  }, []);
+
+  // Sync Selection with current stage
   const { set, category, question } = game.currentStage;
-  const isBonusRound = set === SETS_PER_GAME; 
-  
+  useEffect(() => {
+      // Find existing result for this stage
+      const existingResult = game.results.find(r => r.setId === set && r.categoryId === category && r.questionIndex === question);
+      
+      if (existingResult) {
+          setCurrentSelection(new Set(existingResult.correctTeamIds));
+          setManualPoints(existingResult.points);
+      } else {
+          // New question
+          setCurrentSelection(new Set());
+          setManualPoints(null);
+      }
+      setShowConfirm(false);
+  }, [set, category, question, game.results]);
+
   // Display Helpers
+  const isBonusRound = set === SETS_PER_GAME; 
   const displayDate = new Date(game.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   const displayTitle = game.type === 'Regular' ? `${displayDate} Regular Game` : game.title;
   
@@ -74,7 +96,30 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
   const selectAll = () => setCurrentSelection(new Set(gameTeams.map(t => t.id)));
   const selectNone = () => setCurrentSelection(new Set());
 
-  const commitScore = () => {
+  const handlePrevious = () => {
+    let nextQ = question - 1;
+    let nextCat = category;
+    let nextSet = set;
+
+    if (nextQ < 0) {
+        nextQ = QUESTIONS_PER_CATEGORY - 1;
+        nextCat--;
+        if (nextCat < 0) {
+            nextCat = CATEGORIES_PER_SET - 1;
+            nextSet--;
+        }
+    }
+
+    if (nextSet < 0) return; // Can't go back past start
+
+    onUpdateGame({
+        ...game,
+        currentStage: { set: nextSet, category: nextCat, question: nextQ }
+    });
+  };
+
+  const handleNext = () => {
+    // 1. Create Result Object
     const result: QuestionResult = {
       setId: set,
       categoryId: category,
@@ -83,9 +128,17 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
       points: currentPoints
     };
 
-    const newResults = [...game.results, result];
+    // 2. Update Results Array (Replace existing or Append new)
+    const existingIndex = game.results.findIndex(r => r.setId === set && r.categoryId === category && r.questionIndex === question);
+    let newResults = [...game.results];
     
-    // Determine next stage
+    if (existingIndex >= 0) {
+        newResults[existingIndex] = result;
+    } else {
+        newResults.push(result);
+    }
+
+    // 3. Determine Next Stage
     let nextSet = set;
     let nextCat = category;
     let nextQ = question + 1;
@@ -99,6 +152,9 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
       }
     }
 
+    // 4. Check for Set Transition Trigger
+    const isEndOfSet = nextSet > set;
+
     const updatedGame: Game = {
       ...game,
       results: newResults,
@@ -107,9 +163,11 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
     };
 
     onUpdateGame(updatedGame);
-    setCurrentSelection(new Set());
-    setManualPoints(null); 
     setShowConfirm(false);
+
+    if (isEndOfSet) {
+        setViewMode('setSummary');
+    }
   };
 
   const updateCategoryConfig = (field: 'name' | 'type', value: string) => {
@@ -152,17 +210,17 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
     }
   };
 
-  const exportSummaryAsPng = async () => {
-    if (summaryRef.current) {
+  const exportElementAsPng = async (element: HTMLElement | null, fileName: string) => {
+    if (element) {
         setIsExporting(true);
         try {
-            const canvas = await html2canvas(summaryRef.current, {
-                scale: 2, // Higher resolution
+            const canvas = await html2canvas(element, {
+                scale: 2, 
                 backgroundColor: '#ffffff',
                 useCORS: true
             });
             const link = document.createElement('a');
-            link.download = `${game.title.replace(/\s+/g, '_')}_Summary.png`;
+            link.download = fileName;
             link.href = canvas.toDataURL('image/png');
             link.click();
         } catch (error) {
@@ -244,6 +302,88 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
      );
   }
 
+  // Resolve Host Names for summaries
+  const hostNames = game.hostIds && game.hostIds.length > 0 
+                ? game.hostIds.map(hid => hosts.find(h => h.id === hid)?.name || 'Unknown').join(', ')
+                : 'TNP Kabacan Team';
+
+  // --- Set Summary View ---
+  if (viewMode === 'setSummary') {
+      const setJustFinished = set - 1; // because set is already incremented in handleNext
+      // Build columns: Set 1 ... Set JustFinished, Total
+      const setsToShow = Array.from({length: setJustFinished + 1}, (_, i) => i);
+      
+      const setSummaryData = rankedTeams.map(team => {
+          const setScores: number[] = [];
+          let total = 0;
+          setsToShow.forEach(sId => {
+              const setResults = game.results.filter(r => r.setId === sId);
+              let sScore = 0;
+              setResults.forEach(r => {
+                 if(r.correctTeamIds.includes(team.id)) sScore += r.points;
+              });
+              setScores.push(sScore);
+              total += sScore;
+          });
+          return { team, setScores, total };
+      });
+
+      const title = setJustFinished === SETS_PER_GAME ? "Bonus Round" : `Set ${setJustFinished + 1}`;
+
+      return (
+         <div className="h-full flex flex-col p-4 md:p-6 max-w-7xl mx-auto w-full pb-24">
+             <div className="flex justify-between items-center mb-6">
+                 <h2 className="text-2xl font-bold text-gray-900">Set Summary: {title}</h2>
+                 <div className="flex gap-2">
+                     <Button onClick={() => exportElementAsPng(setSummaryRef.current, `${game.title}_Set${setJustFinished+1}_Summary.png`)} disabled={isExporting} icon={Download}>
+                        {isExporting ? "Exporting..." : "Download PNG"}
+                     </Button>
+                     <Button variant="success" onClick={() => setViewMode('scorer')} icon={ArrowRight}>Continue to Next Set</Button>
+                 </div>
+             </div>
+
+             <div className="overflow-auto bg-gray-200 p-4 rounded-xl border border-gray-300">
+                <div ref={setSummaryRef} className="bg-white p-8 rounded-xl shadow-sm min-w-[600px] text-gray-900">
+                   <div className="text-center mb-6 border-b-2 border-red-600 pb-4">
+                      <div className="flex justify-center items-center gap-2 mb-2">
+                           <div className="text-2xl font-black text-gray-900 tracking-tight">Trivia Nights <span className="text-red-600">Pinas</span></div>
+                      </div>
+                      <h2 className="text-3xl font-black text-gray-900 uppercase">{title} Standings</h2>
+                      <p className="text-gray-500">{displayTitle}</p>
+                   </div>
+                   
+                   <table className="w-full text-left">
+                       <thead>
+                           <tr className="border-b-2 border-gray-800">
+                               <th className="py-2 px-2 text-sm font-black uppercase text-gray-600 w-16 text-center">Rank</th>
+                               <th className="py-2 px-2 text-sm font-black uppercase text-gray-600">Team</th>
+                               {setsToShow.map(i => (
+                                   <th key={i} className="py-2 px-2 text-sm font-black uppercase text-gray-600 text-center">
+                                       {i === SETS_PER_GAME ? 'Bonus' : `Set ${i+1}`}
+                                   </th>
+                               ))}
+                               <th className="py-2 px-2 text-sm font-black uppercase text-red-600 text-right w-24">Total</th>
+                           </tr>
+                       </thead>
+                       <tbody className="divide-y divide-gray-100">
+                           {setSummaryData.map((row, idx) => (
+                               <tr key={row.team.id} className={idx < 3 ? 'bg-yellow-50/30' : ''}>
+                                   <td className="py-3 px-2 text-center font-bold text-gray-500">#{idx+1}</td>
+                                   <td className="py-3 px-2 font-bold text-lg">{row.team.name}</td>
+                                   {row.setScores.map((s, i) => (
+                                       <td key={i} className="py-3 px-2 text-center font-medium text-gray-600">{s}</td>
+                                   ))}
+                                   <td className="py-3 px-2 text-right font-black text-2xl text-red-600">{row.total}</td>
+                               </tr>
+                           ))}
+                       </tbody>
+                   </table>
+                </div>
+             </div>
+         </div>
+      );
+  }
+
   // --- Final Summary View ---
   if (viewMode === 'summary') {
      const setIndices = Array.from({length: SETS_PER_GAME + (game.hasBonusRound ? 1 : 0)}, (_, i) => i);
@@ -266,19 +406,16 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
          });
          return { team, setScores, total };
      });
-
-     // Resolve Host Names
-     const hostNames = game.hostIds && game.hostIds.length > 0 
-                ? game.hostIds.map(hid => hosts.find(h => h.id === hid)?.name || 'Unknown').join(', ')
-                : 'TNP Kabacan Team';
      
      return (
         <div className="h-full flex flex-col p-4 md:p-6 max-w-7xl mx-auto w-full pb-24">
              <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-900">Official Game Summary</h2>
                 <div className="flex gap-2">
-                    <Button onClick={() => setViewMode('scorer')} variant="ghost" icon={RotateCcw}>Back</Button>
-                    <Button onClick={exportSummaryAsPng} disabled={isExporting} icon={Download}>
+                    {game.status !== 'Archived' && (
+                        <Button onClick={() => setViewMode('scorer')} variant="ghost" icon={RotateCcw}>Back</Button>
+                    )}
+                    <Button onClick={() => exportElementAsPng(summaryRef.current, `${game.title}_FinalSummary.png`)} disabled={isExporting} icon={Download}>
                         {isExporting ? "Exporting..." : "Download PNG"}
                     </Button>
                     <Button onClick={() => setViewMode('feedback')} icon={MessageSquare}>Next: Feedback</Button>
@@ -441,9 +578,14 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
 
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-50 flex justify-end gap-3">
                 <Button variant="ghost" onClick={() => setViewMode('summary')} disabled={isExiting}>Back to Summary</Button>
-                <Button variant="success" onClick={finalizeGame} disabled={isExiting} icon={isExiting ? RefreshCw : Check}>
-                    {isExiting ? "Saving..." : "Finalize & Archive Game"}
-                </Button>
+                {game.status !== 'Archived' && (
+                    <Button variant="success" onClick={finalizeGame} disabled={isExiting} icon={isExiting ? RefreshCw : Check}>
+                        {isExiting ? "Saving..." : "Finalize & Archive Game"}
+                    </Button>
+                )}
+                {game.status === 'Archived' && (
+                     <Button variant="ghost" onClick={onExit} icon={X}>Close</Button>
+                )}
             </div>
          </div>
       );
@@ -585,11 +727,20 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
                <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">{displayTitle}</span>
                {game.stickyPoints && <span className="text-xs text-gray-400">Pts: {game.stickyPoints}</span>}
             </div>
+            
+            {/* Updated Header Format */}
             <div className="flex items-baseline justify-between md:justify-start gap-1 md:gap-4 text-gray-900 flex-wrap">
                <div className="flex flex-col">
-                  <span className="text-[10px] md:text-xs text-gray-500 font-bold uppercase tracking-widest">Round</span>
+                  <span className="text-[10px] md:text-xs text-gray-500 font-bold uppercase tracking-widest">Set</span>
                   <span className="text-3xl md:text-5xl font-black tracking-tighter text-red-600">
-                     {isBonusRound ? "BONUS" : `SET ${set + 1}`}
+                     {isBonusRound ? "BONUS" : set + 1}
+                  </span>
+               </div>
+               <span className="text-3xl font-thin text-gray-300">/</span>
+               <div className="flex flex-col">
+                  <span className="text-[10px] md:text-xs text-gray-500 font-bold uppercase tracking-widest">Category</span>
+                  <span className="text-3xl md:text-5xl font-black tracking-tighter text-gray-800">
+                     {category + 1}
                   </span>
                </div>
                <span className="text-3xl font-thin text-gray-300">/</span>
@@ -599,6 +750,7 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
                      #{question + 1}
                   </span>
                </div>
+
                <div className="md:hidden ml-auto flex flex-col items-end">
                     <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Points</span>
                     <input 
@@ -637,11 +789,12 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
             </div>
          </div>
          
-         {/* Top Controls */}
+         {/* Top Controls - End Game moved here */}
          <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end">
             <Button variant="secondary" className="flex-1 md:flex-none text-xs" onClick={() => setShowRoster(true)} icon={UserPlus}>Roster</Button>
             <Button variant="secondary" className="flex-1 md:flex-none text-xs" onClick={() => setViewMode('report')} icon={ClipboardList}>Report</Button>
             <Button variant="secondary" className="flex-1 md:flex-none text-xs" onClick={() => setViewMode('scoreboard')} icon={Trophy}>Scores</Button>
+            <Button variant="danger" className="flex-1 md:flex-none text-xs" onClick={startEndGameFlow} icon={Check}>End Game</Button>
             <Button variant="secondary" className="flex-1 md:flex-none text-xs" onClick={onExit} icon={Pause}>Pause</Button>
          </div>
       </div>
@@ -655,13 +808,17 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
                 <div className="flex flex-col gap-4">
                    <div className="bg-red-50 p-4 rounded-xl border border-red-100 text-center">
                       <label className="text-xs font-bold text-red-800 uppercase block mb-2">Points for this Question</label>
-                      <input 
-                         type="number"
-                         value={currentPoints}
-                         onChange={(e) => setManualPoints(parseInt(e.target.value) || 0)}
-                         className="w-full text-4xl font-black text-center bg-white border-2 border-red-200 rounded-lg py-2 focus:border-red-500 outline-none text-red-600"
-                      />
-                      <p className="text-[10px] text-red-400 mt-2 leading-tight">Changes here will apply to future questions automatically.</p>
+                      <div className="flex items-center gap-2">
+                          <button onClick={() => setManualPoints(currentPoints - 1)} className="p-2 bg-white rounded-lg border border-red-200 hover:bg-red-100 text-red-600"><Minus className="w-4 h-4" /></button>
+                          <input 
+                             type="number"
+                             value={currentPoints}
+                             onChange={(e) => setManualPoints(parseInt(e.target.value) || 0)}
+                             className="flex-1 text-4xl font-black text-center bg-white border-2 border-red-200 rounded-lg py-2 focus:border-red-500 outline-none text-red-600"
+                          />
+                          <button onClick={() => setManualPoints(currentPoints + 1)} className="p-2 bg-white rounded-lg border border-red-200 hover:bg-red-100 text-red-600"><Plus className="w-4 h-4" /></button>
+                      </div>
+                      <p className="text-[10px] text-red-400 mt-2 leading-tight">Adjusting this updates the current question score.</p>
                    </div>
 
                    <div className="grid grid-cols-2 gap-2">
@@ -735,14 +892,21 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
            {!showConfirm ? (
               <div className="flex gap-2">
                  <Button 
-                    className="w-full py-3 md:py-4 text-lg shadow-lg shadow-red-200" 
+                    className="flex-1 py-3 md:py-4 shadow-sm border-gray-200" 
+                    variant="secondary"
+                    onClick={handlePrevious}
+                    disabled={set === 0 && category === 0 && question === 0}
+                    icon={ChevronLeft}
+                 >
+                    Prev
+                 </Button>
+                 <Button 
+                    className="flex-[3] py-3 md:py-4 text-lg shadow-lg shadow-red-200" 
                     onClick={() => setShowConfirm(true)}
                     disabled={gameTeams.length === 0}
                  >
                     Next Question
                  </Button>
-                 {/* Explicitly show End Game here if needed on mobile, but top nav handles it */}
-                 <Button variant="danger" className="py-3 md:py-4" onClick={startEndGameFlow}>End</Button>
               </div>
            ) : (
               <div className="flex gap-2 animate-in slide-in-from-bottom-2 fade-in">
@@ -756,7 +920,7 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
                  <Button 
                     variant="success" 
                     className="flex-[2] py-3 md:py-4 text-lg font-bold shadow-lg shadow-green-200" 
-                    onClick={commitScore}
+                    onClick={handleNext}
                     icon={Save}
                  >
                     Confirm & Save

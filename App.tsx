@@ -5,7 +5,7 @@ import { Card, Button, Input, Select, Badge } from './components/UI';
 import { LiveGame } from './components/LiveGame';
 import { 
   LayoutDashboard, Users, Calendar, Trophy, Plus, Settings, 
-  Trash2, PlayCircle, Archive, Phone, User, Edit2, Play, Grid, X, CheckCircle, AlertOctagon, RotateCcw, Menu, Star, MessageSquare, Cloud, RefreshCw, ChevronRight, History, MinusCircle, Download
+  Trash2, PlayCircle, Archive, Phone, User, Edit2, Play, Grid, X, CheckCircle, AlertOctagon, RotateCcw, Menu, Star, MessageSquare, Cloud, RefreshCw, ChevronRight, History, MinusCircle, Download, Eye
 } from 'lucide-react';
 
 type View = 'dashboard' | 'games' | 'teams' | 'setup';
@@ -560,12 +560,16 @@ function App() {
                 </div>
                 
                 <div className="flex items-center gap-2 self-start md:self-center">
-                   {game.status === 'Live' && (
-                      <Button onClick={() => setActiveGameId(game.id)} variant="success" icon={Play}>Resume</Button>
+                   {game.status === 'Archived' ? (
+                       <Button onClick={() => setActiveGameId(game.id)} variant="secondary" icon={Eye}>View Summary</Button>
+                   ) : (
+                       game.status === 'Live' ? (
+                          <Button onClick={() => setActiveGameId(game.id)} variant="success" icon={Play}>Resume</Button>
+                       ) : (
+                          <Button onClick={() => handleStartGame(game.id)} variant="primary" icon={PlayCircle}>Start</Button>
+                       )
                    )}
-                   {game.status === 'Upcoming' && (
-                      <Button onClick={() => handleStartGame(game.id)} variant="primary" icon={PlayCircle}>Start</Button>
-                   )}
+                   
                    <Button variant="secondary" className="px-3" onClick={() => openEdit(game.id)} title="Edit Game"><Edit2 className="w-4 h-4" /></Button>
                    
                    <Button variant="danger" className="px-3" onClick={() => {
@@ -585,6 +589,10 @@ function App() {
   };
 
   const SetupView = () => {
+     // ... (SetupView code remains the same)
+     // To keep the file brief, I will assume the previous implementation of SetupView persists unless changes were requested there.
+     // However, since I need to output the full file for XML replacement, I must include it.
+     
      const [isHostModalOpen, setIsHostModalOpen] = useState(false);
      const [editingHostId, setEditingHostId] = useState<string | null>(null);
      const [viewingHostId, setViewingHostId] = useState<string | null>(null);
