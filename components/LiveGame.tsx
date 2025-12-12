@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Game, Team, QuestionResult, CategoryType, GameFeedback } from '../types';
 import { SETS_PER_GAME, CATEGORIES_PER_SET, QUESTIONS_PER_CATEGORY, saveData, calculateGameScores } from '../services/gameLogic';
 import { Button, Card, Badge, Input, Select } from './UI';
-import { Check, X, Users, RotateCcw, Save, Play, Plus, ChevronRight, Trophy, AlertTriangle, Pause, Settings, UserPlus, ClipboardList, Type, Image, Music, Box, Star, MessageSquare, RefreshCw } from 'lucide-react';
+import { Check, X, Users, RotateCcw, Save, Play, Plus, ChevronRight, Trophy, AlertTriangle, Pause, Settings, UserPlus, ClipboardList, Type, Image, Music, Box, Star, MessageSquare, RefreshCw, Download, Grid } from 'lucide-react';
+import html2canvas from 'html2canvas';
 
 interface LiveGameProps {
   game: Game;
@@ -14,7 +15,7 @@ interface LiveGameProps {
 export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, onUpdateGame, onExit }) => {
   const [currentSelection, setCurrentSelection] = useState<Set<string>>(new Set());
   const [showConfirm, setShowConfirm] = useState(false);
-  const [viewMode, setViewMode] = useState<'scorer' | 'scoreboard' | 'report' | 'feedback'>('scorer');
+  const [viewMode, setViewMode] = useState<'scorer' | 'scoreboard' | 'report' | 'feedback' | 'summary'>('scorer');
   const [isExiting, setIsExiting] = useState(false);
   
   // Feedback State
@@ -26,6 +27,10 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, onUpdateGame, o
   // Roster Management State
   const [showRoster, setShowRoster] = useState(false);
   const [rosterIds, setRosterIds] = useState<Set<string>>(new Set(game.participatingTeamIds));
+
+  // Export State
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Sync rosterIds if game prop changes externally
   useEffect(() => {
@@ -109,7 +114,7 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, onUpdateGame, o
   };
 
   const startEndGameFlow = () => {
-     setViewMode('feedback');
+     setViewMode('summary');
   }
 
   const finalizeGame = () => {
@@ -139,6 +144,28 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, onUpdateGame, o
       setTimeout(() => {
         onExit();
       }, 100);
+    }
+  };
+
+  const exportSummaryAsPng = async () => {
+    if (summaryRef.current) {
+        setIsExporting(true);
+        try {
+            const canvas = await html2canvas(summaryRef.current, {
+                scale: 2, // Higher resolution
+                backgroundColor: '#ffffff',
+                useCORS: true
+            });
+            const link = document.createElement('a');
+            link.download = `${game.title.replace(/\s+/g, '_')}_Summary.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        } catch (error) {
+            console.error('Export failed', error);
+            alert('Failed to export image.');
+        } finally {
+            setIsExporting(false);
+        }
     }
   };
 
@@ -212,6 +239,122 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, onUpdateGame, o
      );
   }
 
+  // --- Final Summary View ---
+  if (viewMode === 'summary') {
+     const setIndices = Array.from({length: SETS_PER_GAME + (game.hasBonusRound ? 1 : 0)}, (_, i) => i);
+     
+     // Calculate scores per set per team
+     const tableData = rankedTeams.map(team => {
+         const setScores: number[] = [];
+         let total = 0;
+         
+         setIndices.forEach(setId => {
+             const setResults = game.results.filter(r => r.setId === setId);
+             let setScore = 0;
+             setResults.forEach(r => {
+                 if (r.correctTeamIds.includes(team.id)) {
+                     setScore += r.points;
+                 }
+             });
+             setScores.push(setScore);
+             total += setScore;
+         });
+         return { team, setScores, total };
+     });
+
+     return (
+        <div className="h-full flex flex-col p-4 md:p-6 max-w-7xl mx-auto w-full pb-24">
+             <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Official Game Summary</h2>
+                <div className="flex gap-2">
+                    <Button onClick={() => setViewMode('scorer')} variant="ghost" icon={RotateCcw}>Back</Button>
+                    <Button onClick={exportSummaryAsPng} disabled={isExporting} icon={Download}>
+                        {isExporting ? "Exporting..." : "Download PNG"}
+                    </Button>
+                    <Button onClick={() => setViewMode('feedback')} icon={MessageSquare}>Next: Feedback</Button>
+                </div>
+             </div>
+
+             <div className="overflow-auto bg-gray-200 p-4 rounded-xl border border-gray-300">
+                {/* Printable Area */}
+                <div ref={summaryRef} className="bg-white p-8 rounded-xl shadow-sm min-w-[800px] text-gray-900">
+                    <div className="text-center mb-8 border-b-2 border-red-600 pb-4">
+                        <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tight mb-2">{game.title}</h1>
+                        <p className="text-gray-500 font-medium">Official Score Summary • {new Date(game.date).toLocaleDateString()}</p>
+                    </div>
+
+                    <table className="w-full text-left mb-8">
+                        <thead>
+                            <tr className="border-b-2 border-gray-800">
+                                <th className="py-3 px-2 text-sm font-black uppercase text-gray-600 w-16 text-center">Rank</th>
+                                <th className="py-3 px-2 text-sm font-black uppercase text-gray-600">Team Name</th>
+                                {setIndices.map(i => (
+                                    <th key={i} className="py-3 px-2 text-sm font-black uppercase text-gray-600 text-center">
+                                        {i === SETS_PER_GAME ? 'Bonus' : `Set ${i+1}`}
+                                    </th>
+                                ))}
+                                <th className="py-3 px-2 text-sm font-black uppercase text-red-600 text-right w-24">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {tableData.map((row, idx) => (
+                                <tr key={row.team.id} className={idx < 3 ? 'bg-yellow-50/30' : ''}>
+                                    <td className="py-4 px-2 text-center font-bold text-gray-500">
+                                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx+1}`}
+                                    </td>
+                                    <td className="py-4 px-2 font-bold text-lg">{row.team.name}</td>
+                                    {row.setScores.map((score, i) => (
+                                        <td key={i} className="py-4 px-2 text-center font-medium text-gray-600">
+                                            {score}
+                                        </td>
+                                    ))}
+                                    <td className="py-4 px-2 text-right font-black text-2xl text-red-600">{row.total}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    
+                    {/* Game Matrix / Visual Check Marks */}
+                    <div className="mt-8 pt-6 border-t border-gray-200">
+                        <h3 className="text-sm font-bold uppercase text-gray-500 mb-4 flex items-center gap-2">
+                            <Grid className="w-4 h-4" /> Performance Matrix
+                        </h3>
+                        <div className="space-y-3">
+                            {rankedTeams.map(team => (
+                                <div key={team.id} className="flex items-center gap-4">
+                                    <div className="w-32 text-xs font-bold text-gray-600 truncate text-right">{team.name}</div>
+                                    <div className="flex-1 flex flex-wrap gap-0.5">
+                                        {game.results.map((res, i) => {
+                                            const isCorrect = res.correctTeamIds.includes(team.id);
+                                            // Optional: Add separate between sets visually
+                                            const isNewSet = i > 0 && res.setId !== game.results[i-1].setId;
+                                            return (
+                                                <div key={i} className={`flex ${isNewSet ? 'ml-1' : ''}`}>
+                                                    <div 
+                                                        className={`w-2 h-4 md:w-3 md:h-5 rounded-[1px] ${isCorrect ? 'bg-green-500' : 'bg-gray-200'}`} 
+                                                        title={`Q${i+1}: ${isCorrect ? 'Correct' : 'Wrong'}`}
+                                                    />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="w-16 text-right text-xs font-medium text-gray-400">
+                                        {Math.round((game.results.filter(r => r.correctTeamIds.includes(team.id)).length / game.results.length) * 100)}%
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-4 flex justify-end gap-4 text-[10px] text-gray-400 uppercase font-bold">
+                            <div className="flex items-center gap-1"><div className="w-3 h-3 bg-green-500 rounded-[1px]"></div> Correct</div>
+                            <div className="flex items-center gap-1"><div className="w-3 h-3 bg-gray-200 rounded-[1px]"></div> Wrong</div>
+                        </div>
+                    </div>
+                </div>
+             </div>
+        </div>
+     );
+  }
+
   // --- Feedback View ---
   if (viewMode === 'feedback') {
       // Get all played categories for the dropdown
@@ -279,7 +422,7 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, onUpdateGame, o
             </div>
 
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-50 flex justify-end gap-3">
-                <Button variant="ghost" onClick={() => setViewMode('scorer')} disabled={isExiting}>Back to Scorer</Button>
+                <Button variant="ghost" onClick={() => setViewMode('summary')} disabled={isExiting}>Back to Summary</Button>
                 <Button variant="success" onClick={finalizeGame} disabled={isExiting} icon={isExiting ? RefreshCw : Check}>
                     {isExiting ? "Saving..." : "Finalize & Archive Game"}
                 </Button>
@@ -399,8 +542,8 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, onUpdateGame, o
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Game Finished!</h2>
         <p className="text-gray-500 mb-6">All sets and questions have been completed.</p>
         <div className="space-y-3">
-           <Button onClick={() => setViewMode('report')} variant="secondary" className="w-full">View Reports</Button>
-           <Button onClick={startEndGameFlow} variant="primary" className="w-full">Proceed to Feedback & Archive</Button>
+           <Button onClick={() => setViewMode('summary')} variant="primary" className="w-full">View Final Summary</Button>
+           <Button onClick={() => setViewMode('report')} variant="secondary" className="w-full">View Stats Report</Button>
         </div>
       </Card>
     );
