@@ -646,11 +646,35 @@ function App() {
         }
         setIsLoading(true);
         try {
-            // Note: GET requests usually handle redirects. 
-            // 'no-cors' would prevent reading the body. 
-            // Google Apps Script must be deployed as "Anyone" for this to work.
-            const response = await fetch(sheetUrl);
-            const data = await response.json();
+            // Append a timestamp to prevent browser caching of the GET request
+            let urlStr = sheetUrl;
+            try {
+                const url = new URL(sheetUrl);
+                url.searchParams.append('t', Date.now().toString());
+                urlStr = url.toString();
+            } catch(e) {
+                // Fallback if URL is invalid (unlikely if user used default, but possible)
+                if (urlStr.includes('?')) urlStr += `&t=${Date.now()}`;
+                else urlStr += `?t=${Date.now()}`;
+            }
+
+            const response = await fetch(urlStr, {
+                method: 'GET',
+                // Important: Do NOT set Content-Type header for GET requests to GAS Web Apps to avoid CORS preflight issues.
+            });
+            
+            if (!response.ok) {
+                 throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const text = await response.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error("Failed to parse JSON response:", text);
+                throw new Error("Invalid JSON response from server. Check console for details.");
+            }
             
             if (data) {
                 if (data.teams) setTeams(data.teams);
@@ -668,7 +692,7 @@ function App() {
             }
         } catch (e) {
             console.error(e);
-            alert("Failed to load data. Ensure your Script is deployed as 'Web App' with access 'Anyone'.");
+            alert(`Failed to load data: ${(e as Error).message}. Ensure your Script is deployed as 'Web App' with access 'Anyone'.`);
         } finally {
             setIsLoading(false);
         }
