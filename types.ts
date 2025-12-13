@@ -38,6 +38,15 @@ export interface QuestionResult {
   points: number;
 }
 
+export interface ManualAdjustment {
+  id: string;
+  teamId: string;
+  points: number;
+  setId: number; // The set during which this adjustment was made
+  reason?: string;
+  timestamp: string;
+}
+
 export interface CategoryConfig {
   name: string;
   type: CategoryType;
@@ -75,6 +84,7 @@ export interface Game {
   
   // History/Logs
   results: QuestionResult[];
+  manualAdjustments?: ManualAdjustment[];
   
   // Post Game
   feedback?: GameFeedback[];

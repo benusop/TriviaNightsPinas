@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Game, Team, QuestionResult, CategoryType, GameFeedback, Host } from '../types';
+import { Game, Team, QuestionResult, CategoryType, GameFeedback, Host, ManualAdjustment } from '../types';
 import { SETS_PER_GAME, CATEGORIES_PER_SET, QUESTIONS_PER_CATEGORY, saveData, calculateGameScores } from '../services/gameLogic';
 import { Button, Card, Badge, Input, Select } from './UI';
-import { Check, X, Users, RotateCcw, Save, Play, Plus, ChevronRight, Trophy, AlertTriangle, Pause, Settings, UserPlus, ClipboardList, Type, Image, Music, Box, Star, MessageSquare, RefreshCw, Download, Grid, ChevronLeft, Minus, ArrowRight } from 'lucide-react';
+import { Check, X, Users, RotateCcw, Save, Play, Plus, ChevronRight, Trophy, AlertTriangle, Pause, Settings, UserPlus, ClipboardList, Type, Image, Music, Box, Star, MessageSquare, RefreshCw, Download, Grid, ChevronLeft, Minus, ArrowRight, Gavel, MoreHorizontal } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 interface LiveGameProps {
@@ -15,9 +15,13 @@ interface LiveGameProps {
 
 export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdateGame, onExit }) => {
   const [currentSelection, setCurrentSelection] = useState<Set<string>>(new Set());
-  const [showConfirm, setShowConfirm] = useState(false);
   const [viewMode, setViewMode] = useState<'scorer' | 'scoreboard' | 'report' | 'feedback' | 'summary' | 'setSummary'>('scorer');
   const [isExiting, setIsExiting] = useState(false);
+  
+  // Adjustment Modal State
+  const [adjustingTeamId, setAdjustingTeamId] = useState<string | null>(null);
+  const [adjustmentPoints, setAdjustmentPoints] = useState<number>(0);
+  const [adjustmentReason, setAdjustmentReason] = useState<string>('');
   
   // Feedback State
   const [feedbackData, setFeedbackData] = useState<Record<string, GameFeedback>>({});
@@ -60,7 +64,6 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
           setCurrentSelection(new Set());
           setManualPoints(null);
       }
-      setShowConfirm(false);
   }, [set, category, question, game.results]);
 
   // Display Helpers
@@ -163,12 +166,38 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
     };
 
     onUpdateGame(updatedGame);
-    setShowConfirm(false);
 
     if (isEndOfSet) {
         setViewMode('setSummary');
     }
   };
+  
+  const openAdjustmentModal = (teamId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setAdjustingTeamId(teamId);
+      setAdjustmentPoints(0);
+      setAdjustmentReason('');
+  }
+  
+  const saveAdjustment = () => {
+      if (!adjustingTeamId) return;
+      
+      const newAdjustment: ManualAdjustment = {
+          id: crypto.randomUUID(),
+          teamId: adjustingTeamId,
+          points: adjustmentPoints,
+          setId: set, // Associate with current set
+          reason: adjustmentReason,
+          timestamp: new Date().toISOString()
+      };
+      
+      onUpdateGame({
+          ...game,
+          manualAdjustments: [...(game.manualAdjustments || []), newAdjustment]
+      });
+      
+      setAdjustingTeamId(null);
+  }
 
   const updateCategoryConfig = (field: 'name' | 'type', value: string) => {
      const newConfigs = { ...game.categoryConfigs };
@@ -267,7 +296,7 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
   if (showRoster) {
      return (
         <div className="fixed inset-0 z-50 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-           <Card className="w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl" title="Manage Game Roster">
+           <Card className="w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl" title="Manage Game Roster" noPadding>
               <div className="p-4 border-b border-gray-200 bg-gray-50 text-sm text-gray-600">
                  Select teams participating in this game.
               </div>
@@ -301,6 +330,38 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
         </div>
      );
   }
+  
+  // --- Adjustment Modal ---
+  const adjustmentModal = adjustingTeamId ? (
+      <div className="fixed inset-0 z-50 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+         <Card title={`Adjust Points: ${teams.find(t => t.id === adjustingTeamId)?.name}`} className="w-full max-w-md shadow-2xl animate-in fade-in zoom-in-95">
+             <div className="space-y-4">
+                 <div className="bg-blue-50 p-3 rounded text-sm text-blue-800">
+                     Add bonus points (positive) or penalties (negative). These will be added to the total score.
+                 </div>
+                 <div>
+                     <label className="block text-sm font-semibold text-gray-700 mb-1">Points to Add/Deduct</label>
+                     <div className="flex items-center gap-2">
+                         <button onClick={() => setAdjustmentPoints(p => p - 1)} className="p-2 bg-gray-100 rounded hover:bg-gray-200 border border-gray-300"><Minus className="w-4 h-4"/></button>
+                         <input 
+                            type="number" 
+                            className="flex-1 text-center font-bold text-2xl border border-gray-300 rounded py-2 bg-white text-gray-900 shadow-sm"
+                            value={adjustmentPoints}
+                            onChange={e => setAdjustmentPoints(parseInt(e.target.value) || 0)}
+                         />
+                         <button onClick={() => setAdjustmentPoints(p => p + 1)} className="p-2 bg-gray-100 rounded hover:bg-gray-200 border border-gray-300"><Plus className="w-4 h-4"/></button>
+                     </div>
+                 </div>
+                 <Input label="Reason (Optional)" placeholder="e.g. Best Costume, Late Penalty" value={adjustmentReason} onChange={e => setAdjustmentReason(e.target.value)} />
+                 
+                 <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                     <Button variant="ghost" onClick={() => setAdjustingTeamId(null)}>Cancel</Button>
+                     <Button onClick={saveAdjustment}>Save Adjustment</Button>
+                 </div>
+             </div>
+         </Card>
+      </div>
+  ) : null;
 
   // Resolve Host Names for summaries
   const hostNames = game.hostIds && game.hostIds.length > 0 
@@ -322,6 +383,14 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
               setResults.forEach(r => {
                  if(r.correctTeamIds.includes(team.id)) sScore += r.points;
               });
+              
+              // Add manual adjustments for this set
+              const adjPoints = (game.manualAdjustments || [])
+                  .filter(a => a.setId === sId && a.teamId === team.id)
+                  .reduce((sum, a) => sum + a.points, 0);
+              
+              sScore += adjPoints;
+
               setScores.push(sScore);
               total += sScore;
           });
@@ -360,8 +429,8 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
                                {setsToShow.map(i => (
                                    <th key={i} className="py-2 px-2 text-sm font-black uppercase text-gray-600 text-center">
                                        {i === SETS_PER_GAME ? 'Bonus' : `Set ${i+1}`}
-                                   </th>
-                               ))}
+                                    </th>
+                                ))}
                                <th className="py-2 px-2 text-sm font-black uppercase text-red-600 text-right w-24">Total</th>
                            </tr>
                        </thead>
@@ -401,6 +470,13 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
                      setScore += r.points;
                  }
              });
+
+             // Add manual adjustments for this set
+             const adjPoints = (game.manualAdjustments || [])
+                  .filter(a => a.setId === setId && a.teamId === team.id)
+                  .reduce((sum, a) => sum + a.points, 0);
+             setScore += adjPoints;
+
              setScores.push(setScore);
              total += setScore;
          });
@@ -704,6 +780,35 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
         <div className="space-y-3">
            <Button onClick={() => setViewMode('summary')} variant="primary" className="w-full">View Final Summary</Button>
            <Button onClick={() => setViewMode('report')} variant="secondary" className="w-full">View Stats Report</Button>
+           
+           <div className="pt-4 border-t border-gray-100 grid grid-cols-1 gap-2">
+               {!game.hasBonusRound && (
+                   <Button 
+                       onClick={() => onUpdateGame({...game, hasBonusRound: true})} 
+                       variant="success" 
+                       className="w-full"
+                       icon={Plus}
+                   >
+                       Add Bonus Round
+                   </Button>
+               )}
+               <Button 
+                   onClick={() => {
+                       const prevSet = set - 1;
+                       const prevCat = CATEGORIES_PER_SET - 1;
+                       const prevQ = QUESTIONS_PER_CATEGORY - 1;
+                       onUpdateGame({
+                           ...game,
+                           currentStage: { set: prevSet, category: prevCat, question: prevQ }
+                       });
+                   }} 
+                   variant="ghost" 
+                   className="w-full"
+                   icon={RotateCcw}
+               >
+                   Back to Scoring
+               </Button>
+           </div>
         </div>
       </Card>
     );
@@ -757,7 +862,7 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
                          type="number"
                          value={currentPoints}
                          onChange={(e) => setManualPoints(parseInt(e.target.value) || 0)}
-                         className="w-16 text-3xl font-black text-right bg-transparent border-b-2 border-red-200 focus:border-red-500 outline-none text-red-600 p-0"
+                         className="w-20 text-3xl font-black text-right bg-transparent border-b-2 border-red-200 focus:border-red-500 outline-none text-red-600 p-0"
                     />
                </div>
             </div>
@@ -808,15 +913,17 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
                 <div className="flex flex-col gap-4">
                    <div className="bg-red-50 p-4 rounded-xl border border-red-100 text-center">
                       <label className="text-xs font-bold text-red-800 uppercase block mb-2">Points for this Question</label>
-                      <div className="flex items-center gap-2">
-                          <button onClick={() => setManualPoints(currentPoints - 1)} className="p-2 bg-white rounded-lg border border-red-200 hover:bg-red-100 text-red-600"><Minus className="w-4 h-4" /></button>
-                          <input 
-                             type="number"
-                             value={currentPoints}
-                             onChange={(e) => setManualPoints(parseInt(e.target.value) || 0)}
-                             className="flex-1 text-4xl font-black text-center bg-white border-2 border-red-200 rounded-lg py-2 focus:border-red-500 outline-none text-red-600"
-                          />
-                          <button onClick={() => setManualPoints(currentPoints + 1)} className="p-2 bg-white rounded-lg border border-red-200 hover:bg-red-100 text-red-600"><Plus className="w-4 h-4" /></button>
+                      <div className="flex items-center justify-between gap-2">
+                          <button onClick={() => setManualPoints(currentPoints - 1)} className="w-10 h-10 flex items-center justify-center bg-white rounded-lg border border-red-200 hover:bg-red-100 text-red-600 shadow-sm transition-colors"><Minus className="w-5 h-5" /></button>
+                          <div className="flex-1 min-w-0">
+                             <input 
+                                type="number"
+                                value={currentPoints}
+                                onChange={(e) => setManualPoints(parseInt(e.target.value) || 0)}
+                                className="w-full text-3xl font-black text-center bg-white border-2 border-red-200 rounded-lg py-2 focus:border-red-500 outline-none text-red-600 shadow-inner"
+                             />
+                          </div>
+                          <button onClick={() => setManualPoints(currentPoints + 1)} className="w-10 h-10 flex items-center justify-center bg-white rounded-lg border border-red-200 hover:bg-red-100 text-red-600 shadow-sm transition-colors"><Plus className="w-5 h-5" /></button>
                       </div>
                       <p className="text-[10px] text-red-400 mt-2 leading-tight">Adjusting this updates the current question score.</p>
                    </div>
@@ -876,6 +983,12 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
                              }`}
                           >
                              {isSelected && <div className="absolute top-1 right-1 md:top-2 md:right-2 bg-white/20 rounded-full p-1"><Check className="w-3 h-3 md:w-4 md:h-4 text-white" /></div>}
+                             <div className="absolute top-1 left-1 md:top-2 md:left-2" onClick={(e) => openAdjustmentModal(team.id, e)}>
+                                 <div className="bg-gray-100 hover:bg-gray-200 rounded-full p-1 text-gray-500" title="Adjust Points">
+                                     <MoreHorizontal className="w-3 h-3 md:w-4 md:h-4" />
+                                 </div>
+                             </div>
+                             
                              <span className={`font-bold text-sm md:text-lg leading-tight line-clamp-2 ${isSelected ? 'text-white' : 'text-gray-800'}`}>{team.name}</span>
                              <span className={`text-[10px] md:text-xs mt-1 font-medium ${isSelected ? 'text-red-100' : 'text-gray-400'}`}>{scores[team.id] || 0} pts</span>
                           </button>
@@ -889,45 +1002,27 @@ export const LiveGame: React.FC<LiveGameProps> = ({ game, teams, hosts, onUpdate
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur border-t border-gray-200 md:relative md:bg-transparent md:border-none md:p-0 z-40">
-           {!showConfirm ? (
-              <div className="flex gap-2">
-                 <Button 
-                    className="flex-1 py-3 md:py-4 shadow-sm border-gray-200" 
-                    variant="secondary"
-                    onClick={handlePrevious}
-                    disabled={set === 0 && category === 0 && question === 0}
-                    icon={ChevronLeft}
-                 >
-                    Prev
-                 </Button>
-                 <Button 
-                    className="flex-[3] py-3 md:py-4 text-lg shadow-lg shadow-red-200" 
-                    onClick={() => setShowConfirm(true)}
-                    disabled={gameTeams.length === 0}
-                 >
-                    Next Question
-                 </Button>
-              </div>
-           ) : (
-              <div className="flex gap-2 animate-in slide-in-from-bottom-2 fade-in">
-                 <Button 
-                    variant="ghost" 
-                    className="flex-1" 
-                    onClick={() => setShowConfirm(false)}
-                 >
-                    Cancel
-                 </Button>
-                 <Button 
-                    variant="success" 
-                    className="flex-[2] py-3 md:py-4 text-lg font-bold shadow-lg shadow-green-200" 
-                    onClick={handleNext}
-                    icon={Save}
-                 >
-                    Confirm & Save
-                 </Button>
-              </div>
-           )}
+          <div className="flex gap-2">
+             <Button 
+                className="flex-1 py-3 md:py-4 shadow-sm border-gray-200" 
+                variant="secondary"
+                onClick={handlePrevious}
+                disabled={set === 0 && category === 0 && question === 0}
+                icon={ChevronLeft}
+             >
+                Prev
+             </Button>
+             <Button 
+                className="flex-[3] py-3 md:py-4 text-lg shadow-lg shadow-red-200" 
+                onClick={handleNext}
+                disabled={gameTeams.length === 0}
+             >
+                Next Question
+             </Button>
+          </div>
       </div>
+      
+      {adjustmentModal}
     </div>
   );
 };

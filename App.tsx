@@ -212,55 +212,56 @@ function App() {
         {/* --- Team Edit Modal --- */}
         {isEditing && (
           <div className="fixed inset-0 z-50 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <Card title={editingTeamId ? "Edit Team" : "New Team"} className="w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95">
-            <form onSubmit={handleSaveTeam} className="space-y-4 flex-1 overflow-y-auto p-1">
-              {editingTeamId && (
-                  <input type="hidden" name="id" value={editingTeamId} />
-              )}
-              {/* Pre-fill logic needs defaultValues or controlled inputs. Using defaultValue for simplicity */}
-              <Input name="name" label="Team Name" required placeholder="e.g. The Quizzards" defaultValue={teams.find(t => t.id === editingTeamId)?.name} />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input name="leader" label="Team Leader" required placeholder="Full Name" defaultValue={teams.find(t => t.id === editingTeamId)?.leader} />
-                <Input name="leaderContact" label="Contact Info (Optional)" placeholder="Mobile/Email" defaultValue={teams.find(t => t.id === editingTeamId)?.leaderContact} />
-              </div>
+          <Card title={editingTeamId ? "Edit Team" : "New Team"} className="w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95" noPadding>
+            <form onSubmit={handleSaveTeam} className="flex flex-col h-full min-h-0">
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                  {editingTeamId && (
+                      <input type="hidden" name="id" value={editingTeamId} />
+                  )}
+                  <Input name="name" label="Team Name" required placeholder="e.g. The Quizzards" defaultValue={teams.find(t => t.id === editingTeamId)?.name} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input name="leader" label="Team Leader" required placeholder="Full Name" defaultValue={teams.find(t => t.id === editingTeamId)?.leader} />
+                    <Input name="leaderContact" label="Contact Info (Optional)" placeholder="Mobile/Email" defaultValue={teams.find(t => t.id === editingTeamId)?.leaderContact} />
+                  </div>
 
-              {/* Members Section */}
-              <div className="border-t border-gray-100 pt-4 mt-2">
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-sm font-bold text-gray-700">Team Members (Max 20)</label>
-                  <Button type="button" variant="secondary" onClick={addMemberField} className="text-xs py-1 px-2" disabled={members.length >= 20}>
-                    + Add Member
-                  </Button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {members.map((member, idx) => (
-                    <div key={idx} className="flex gap-2 items-center bg-gray-50 p-2 rounded border border-gray-200">
-                      <div className="flex-1 space-y-2">
-                        <Input 
-                          placeholder="Member Name" 
-                          value={member.name} 
-                          onChange={e => updateMember(idx, 'name', e.target.value)}
-                          required
-                          className="text-sm py-1"
-                        />
-                        <Input 
-                          placeholder="Contact (Optional)" 
-                          value={member.contact} 
-                          onChange={e => updateMember(idx, 'contact', e.target.value)}
-                          className="text-sm py-1"
-                        />
-                      </div>
-                      <button type="button" onClick={() => removeMember(idx)} className="text-red-400 hover:text-red-600 p-1">
-                        <X className="w-4 h-4" />
-                      </button>
+                  {/* Members Section */}
+                  <div className="border-t border-gray-100 pt-4 mt-2">
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="text-sm font-bold text-gray-700">Team Members (Max 20)</label>
+                      <Button type="button" variant="secondary" onClick={addMemberField} className="text-xs py-1 px-2" disabled={members.length >= 20}>
+                        + Add Member
+                      </Button>
                     </div>
-                  ))}
-                  {members.length === 0 && <div className="text-gray-400 text-sm italic col-span-full text-center py-4">No members added yet.</div>}
-                </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {members.map((member, idx) => (
+                        <div key={idx} className="flex gap-2 items-center bg-gray-50 p-2 rounded border border-gray-200">
+                          <div className="flex-1 space-y-2">
+                            <Input 
+                              placeholder="Member Name" 
+                              value={member.name} 
+                              onChange={e => updateMember(idx, 'name', e.target.value)}
+                              required
+                              className="text-sm py-1"
+                            />
+                            <Input 
+                              placeholder="Contact (Optional)" 
+                              value={member.contact} 
+                              onChange={e => updateMember(idx, 'contact', e.target.value)}
+                              className="text-sm py-1"
+                            />
+                          </div>
+                          <button type="button" onClick={() => removeMember(idx)} className="text-red-400 hover:text-red-600 p-1">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                      {members.length === 0 && <div className="text-gray-400 text-sm italic col-span-full text-center py-4">No members added yet.</div>}
+                    </div>
+                  </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 sticky bottom-0 bg-white">
+              <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-2 shrink-0">
                 <Button type="button" variant="ghost" onClick={closeForm}>Cancel</Button>
                 <Button type="submit">Save Team</Button>
               </div>
@@ -589,10 +590,6 @@ function App() {
   };
 
   const SetupView = () => {
-     // ... (SetupView code remains the same)
-     // To keep the file brief, I will assume the previous implementation of SetupView persists unless changes were requested there.
-     // However, since I need to output the full file for XML replacement, I must include it.
-     
      const [isHostModalOpen, setIsHostModalOpen] = useState(false);
      const [editingHostId, setEditingHostId] = useState<string | null>(null);
      const [viewingHostId, setViewingHostId] = useState<string | null>(null);
@@ -946,7 +943,7 @@ function App() {
         </nav>
 
         <div className="p-4 border-t border-gray-100 text-xs text-gray-400 text-center font-medium">
-          v1.5.1 • Google Cloud
+          v1.5.2 • Google Cloud
         </div>
       </aside>
 

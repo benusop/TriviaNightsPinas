@@ -1,15 +1,15 @@
 import React from 'react';
 import { LucideIcon } from 'lucide-react';
 
-export const Card: React.FC<{ children: React.ReactNode; className?: string; title?: string; action?: React.ReactNode }> = ({ children, className = "", title, action }) => (
+export const Card: React.FC<{ children: React.ReactNode; className?: string; title?: string; action?: React.ReactNode; noPadding?: boolean }> = ({ children, className = "", title, action, noPadding = false }) => (
   <div className={`bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden ${className}`}>
     {(title || action) && (
-      <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+      <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 shrink-0">
         {title && <h3 className="text-lg font-bold text-gray-800">{title}</h3>}
         {action && <div>{action}</div>}
       </div>
     )}
-    <div className="p-6">
+    <div className={`${noPadding ? '' : 'p-6'} flex-1 min-h-0 flex flex-col`}>
       {children}
     </div>
   </div>

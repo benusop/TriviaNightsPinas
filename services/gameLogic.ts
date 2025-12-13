@@ -39,6 +39,14 @@ export const calculateGameScores = (game: Game): Record<string, number> => {
     });
   });
 
+  if (game.manualAdjustments) {
+    game.manualAdjustments.forEach(adj => {
+        if (scores[adj.teamId] !== undefined) {
+            scores[adj.teamId] += adj.points;
+        }
+    });
+  }
+
   return scores;
 };
 
