@@ -79,7 +79,14 @@ export const getTeamHistory = (teamId: string, games: Game[], hosts?: any[]) => 
 };
 
 export const calculateSeasonStandings = (seasonId: string, games: Game[], teams: Team[]): RoyaltyStandings[] => {
-  const seasonGames = games.filter(g => g.seasonId === seasonId && g.status === 'Archived');
+  // Filter games by season, archive status, AND the countInRoyalty flag
+  // Handle legacy data where countInRoyalty might be undefined (Regular games counted by default)
+  const seasonGames = games.filter(g => 
+    g.seasonId === seasonId && 
+    g.status === 'Archived' && 
+    (g.countInRoyalty !== undefined ? g.countInRoyalty : g.type === 'Regular')
+  );
+  
   const standingsMap: Record<string, RoyaltyStandings> = {};
 
   // Initialize all teams

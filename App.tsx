@@ -372,6 +372,9 @@ function App() {
     const [editingGameId, setEditingGameId] = useState<string | null>(null);
     const [modalHostIds, setModalHostIds] = useState<string[]>([]); // New state for multiple hosts
     const [showArchivedGames, setShowArchivedGames] = useState(false);
+    
+    // Controlled field for royalty checkbox to allow auto-logic
+    const [modalCountInRoyalty, setModalCountInRoyalty] = useState(true);
 
     // Filter games based on archive status
     const filteredGames = games.filter(g => showArchivedGames ? g.status === 'Archived' : g.status !== 'Archived');
@@ -380,6 +383,7 @@ function App() {
     const openCreate = () => {
         setEditingGameId(null);
         setModalHostIds(['']); // Start with one empty host
+        setModalCountInRoyalty(true); // Default to regular game behavior
         setIsModalOpen(true);
     }
 
@@ -388,6 +392,7 @@ function App() {
         const gameToEdit = games.find(g => g.id === id);
         // Ensure at least one select is shown
         setModalHostIds(gameToEdit?.hostIds && gameToEdit.hostIds.length > 0 ? gameToEdit.hostIds : ['']);
+        setModalCountInRoyalty(gameToEdit?.countInRoyalty !== undefined ? gameToEdit.countInRoyalty : gameToEdit?.type === 'Regular');
         setIsModalOpen(true);
     }
 
@@ -416,7 +421,8 @@ function App() {
                         type: type,
                         title: isSpecial ? (formData.get('title') as string) : 'Regular Game',
                         date: formData.get('date') as string,
-                        hasBonusRound: hasBonusRound
+                        hasBonusRound: hasBonusRound,
+                        countInRoyalty: modalCountInRoyalty
                     }
                 }
                 return g;
@@ -433,6 +439,7 @@ function App() {
               status: 'Upcoming',
               participatingTeamIds: [],
               hasBonusRound: hasBonusRound,
+              countInRoyalty: modalCountInRoyalty,
               categoryPoints: {},
               categoryConfigs: {},
               currentStage: { set: 0, category: 0, question: 0 },
@@ -460,6 +467,12 @@ function App() {
         setModalHostIds(updated.length ? updated : ['']);
     };
 
+    const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const type = e.target.value as GameType;
+        // Auto-set the royalty checkbox based on type
+        setModalCountInRoyalty(type === 'Regular');
+    };
+
     const editingGame = games.find(g => g.id === editingGameId);
 
     return (
@@ -478,7 +491,7 @@ function App() {
              <Card title={editingGameId ? "Edit Game Settings" : "Schedule New Game"} className="w-full max-w-xl shadow-2xl animate-in fade-in zoom-in-95">
                 <form onSubmit={saveGame} className="space-y-5">
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Select name="type" label="Game Type" defaultValue={editingGame?.type || "Regular"}>
+                      <Select name="type" label="Game Type" defaultValue={editingGame?.type || "Regular"} onChange={handleTypeChange}>
                          <option value="Regular">Regular Game</option>
                          <option value="Special">Special Game</option>
                       </Select>
@@ -519,9 +532,26 @@ function App() {
 
                    <Input name="title" label="Game Title (Optional Override)" placeholder="e.g. Halloween Special" defaultValue={editingGame?.title === 'Regular Game' ? '' : editingGame?.title} />
                    
-                   <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                      <input type="checkbox" name="hasBonusRound" id="bonus" defaultChecked={editingGame?.hasBonusRound} className="w-5 h-5 rounded text-red-600 focus:ring-red-500 border-gray-300" />
-                      <label htmlFor="bonus" className="text-gray-700 font-medium">Include Bonus Round (5th Set)</label>
+                   <div className="grid grid-cols-1 gap-3">
+                       <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <input type="checkbox" name="hasBonusRound" id="bonus" defaultChecked={editingGame?.hasBonusRound} className="w-5 h-5 rounded text-red-600 focus:ring-red-500 border-gray-300" />
+                          <label htmlFor="bonus" className="text-gray-700 font-medium">Include Bonus Round (5th Set)</label>
+                       </div>
+                       
+                       <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <input 
+                            type="checkbox" 
+                            name="countInRoyalty" 
+                            id="royalty" 
+                            checked={modalCountInRoyalty} 
+                            onChange={(e) => setModalCountInRoyalty(e.target.checked)}
+                            className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300" 
+                          />
+                          <label htmlFor="royalty" className="text-blue-800 font-medium flex-1">
+                             Count in Season Royalty Standing
+                             <span className="block text-[10px] text-blue-600 opacity-70">Determines if this game's results affect the leaderboard.</span>
+                          </label>
+                       </div>
                    </div>
 
                    <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
@@ -543,6 +573,8 @@ function App() {
              const displayTitle = game.type === 'Regular' 
                 ? `${displayDate} Regular Game`
                 : game.title;
+             
+             const isRoyaltyGame = game.countInRoyalty !== undefined ? game.countInRoyalty : game.type === 'Regular';
 
              return (
              <div key={game.id} className="bg-white border border-gray-200 hover:border-red-200 transition shadow-sm rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 group">
@@ -551,6 +583,11 @@ function App() {
                       {game.status === 'Live' && <Badge color="green">LIVE NOW</Badge>}
                       {game.status === 'Upcoming' && <Badge color="blue">UPCOMING</Badge>}
                       {game.status === 'Archived' && <Badge color="gray">ARCHIVED</Badge>}
+                      {isRoyaltyGame ? (
+                         <Badge color="yellow" title="Counts toward Season Standings">ROYALTY</Badge>
+                      ) : (
+                         <Badge color="gray">NON-ROYALTY</Badge>
+                      )}
                       {game.status !== 'Upcoming' && <span className="text-gray-400 text-xs font-bold uppercase tracking-wide">{displayDate}</span>}
                    </div>
                    <h3 className="text-xl font-bold text-gray-900 group-hover:text-red-600 transition-colors">{displayTitle}</h3>

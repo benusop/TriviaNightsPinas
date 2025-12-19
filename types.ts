@@ -15,6 +15,14 @@ export interface Host {
   age?: number;
 }
 
+export interface Host {
+  id: string;
+  name: string;
+  teamId?: string; // Trivia team affiliation
+  gender?: 'Male' | 'Female' | 'Other';
+  age?: number;
+}
+
 export interface Season {
   id: string;
   name: string; // e.g., "Season 1"
@@ -71,6 +79,7 @@ export interface Game {
   
   // Configuration
   hasBonusRound: boolean;
+  countInRoyalty: boolean; // New: determines if game affects season standings
   categoryPoints: Record<string, number>; // key: "setIndex-catIndex", value: points per question default 1
   categoryConfigs: Record<string, CategoryConfig>; // key: "setIndex-catIndex"
   stickyPoints?: number; // Keeps track of the last used point value
